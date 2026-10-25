@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-photorec_pipeline.py — photo-recovery pipeline with live streaming sorting.
+media-dump-v1 — photo-recovery pipeline with live streaming sorting.
 
 Threads:
   * photorec carves media-only formats (white-listed formats only) from a
@@ -17,12 +17,14 @@ Sorting rules (applied to each file as soon as it lands in staging):
   - else   -> moved to <output>/<extension>/ (collisions auto-renamed)
 
 Usage:
-  sudo python3 photorec_pipeline.py [--yes] [options] <device-or-image>
+  media-dump-v1 [--yes] [options] <device-or-image>
+    (device sources re-exec themselves through sudo automatically — the
+     password is asked once, right after launch; disk images need no sudo)
 
-  sudo python3 photorec_pipeline.py /dev/sdb1 --yes
-  sudo python3 photorec_pipeline.py ~/photorec/phone.dd --yes --ext
-  # sorting-only pass over previously carved files:
-  python3 photorec_pipeline.py --sort-only [staging_dir_or_session_dir]
+  media-dump-v1 /dev/sdb1 --yes
+  media-dump-v1 ~/photorec/phone.dd --yes --ext
+  # sorting-only pass over previously carved files (never asks sudo):
+  media-dump-v1 --sort-only [staging_dir_or_session_dir]
 """
 
 import argparse
@@ -499,8 +501,36 @@ def confirm(args, media_count=0, other_count=0):
 
 
 # ---------------------------------------------------------------- main
+def reexec_via_sudo() -> None:
+    """Re-run this script as root with the same args (device sources only).
+
+    Lets you type `media-dump-v1 /dev/sda ...` without a sudo
+    prefix: sudo asks for the password once right after launch, then the
+    whole run continues as root. SUDO_USER is still set, so all results
+    are chowned back to the invoking user at the end.
+    """
+    argv0 = sys.argv[0]
+    if os.sep not in argv0:                    # invoked via $PATH
+        argv0 = shutil.which(argv0) or argv0
+    script = os.path.realpath(argv0)
+    sudo = shutil.which("sudo")
+    if not sudo:
+        print("error: device source needs root but `sudo` is not installed — "
+              "run this script as root another way.", file=sys.stderr)
+        sys.exit(2)
+    print("[pipeline] device source needs root — re-executing via sudo "
+          "(password is asked once)...", file=sys.stderr, flush=True)
+    cmd = [sudo, "--", (sys.executable or "python3"), script, *sys.argv[1:]]
+    os.execvp(sudo, cmd)                       # replaces this process
+
+
 def main(argv=None):
     args = parse_args(argv)
+    # A device source needs root: replace this process with sudo <us>.
+    # Disk images are carved fine as the user; --sort-only never escalates.
+    if (not args.sort_only and args.source
+            and str(args.source).startswith("/dev/") and os.geteuid() != 0):
+        reexec_via_sudo()          # replaces the process; never returns
     output_dir = Path(args.output).expanduser().resolve()
     staging_dir = Path(args.staging).expanduser().resolve()
 
@@ -532,10 +562,7 @@ def main(argv=None):
             print(f"error: source device/disk image not found: {args.source}",
                   file=sys.stderr)
             return 1
-        if os.geteuid() != 0 and str(args.source).startswith("/dev/"):
-            print("error: carving a device requires root. Run with:\n"
-                  "  sudo python3 photorec_pipeline.py ...", file=sys.stderr)
-            return 2
+        # root guaranteed for device sources by reexec_via_sudo() above
         session = f"carved-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
         session_dir = staging_dir / session
         staging_dirs = [session_dir]
