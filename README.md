@@ -1,9 +1,9 @@
-# photorec-pipeline
+# media-dump
 
-Recover photos, videos and audio with [PhotoRec](https://www.cgsecurity.org/wiki/PhotoRec) and sort them into clean folders **live — while the carve is still running**.
+Carve media (photos, video, audio) with [PhotoRec](https://www.cgsecurity.org/wiki/PhotoRec) and sort it into clean folders **live — while the carve is still running**.
 
-* **`main` (v2)** — everything below, in a btop-style curses TUI → `photorec_pipeline.py`
-* **branch `v1`** — the original plain-text version → `photorec_pipeline_v1.py` (identical behaviour, status lines instead of a TUI)
+* **`main` (v2)** — everything below, in a btop-style curses TUI → `media-dump.py`
+* **branch `v1`** — the original plain-text version → `media-dump_v1.py` (identical behaviour, status lines instead of a TUI)
 
 ## What it does
 
@@ -22,15 +22,27 @@ Recover photos, videos and audio with [PhotoRec](https://www.cgsecurity.org/wiki
 * `photorec` (from the `testdisk` package)
 * optional: ImageMagick's `identify` for the square-icon heuristic
 
+## Install (optional)
+
+```bash
+mkdir -p ~/.local/bin
+cp media-dump.py ~/.local/bin/media-dump
+# and for v1: cp media-dump_v1.py ~/.local/bin/media-dump-v1
+```
+
+(`~/.local/bin` is on `$PATH` by default on Fedora; make sure the copies are `chmod +x`.)
+
 ## Usage (v2)
 
 ```bash
-sudo python3 photorec_pipeline.py /dev/sdb1 --yes            # carve a partition
-sudo python3 photorec_pipeline.py ~/disk.img --yes --ext     # carve an ext2/3/4 image
-sudo python3 photorec_pipeline.py /dev/sda --skip png,gif -y # iconpack-heavy drives
-sudo python3 photorec_pipeline.py /dev/sda -y --no-tui       # plain status lines instead
-python3 photorec_pipeline.py --sort-only                     # finish sorting a leftover session
+media-dump /dev/sdb1 --yes             # carve a partition (auto-sudo, password once)
+media-dump ~/disk.img --yes --ext      # carve an ext2/3/4 image (no sudo needed)
+media-dump /dev/sda --skip png,gif -y  # iconpack-heavy drives
+media-dump /dev/sda -y --no-tui        # plain status lines instead
+media-dump --sort-only                 # finish sorting a leftover session
 ```
+
+Device sources re-exec the script through `sudo` **once**, right after launch — the whole run (TUI, photorec, sorting) then executes as root, with all results chowned back to the invoking user. Disk images and `--sort-only` runs never escalate. The classic `sudo python3 media-dump.py ...` style still works unchanged.
 
 TUI keys: `q` = quit (terminates the carve cleanly, drains staged files, prints a summary) · `s` = pause/unpause the live feed.
 
